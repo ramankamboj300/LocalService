@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalService Finder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #4f46e5;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen font-sans flex justify-center">
+
+    <div id="app" class="w-full max-w-[450px] bg-white h-screen flex flex-col shadow-2xl relative overflow-hidden">
+        <!-- Header -->
+        <header class="bg-gradient-to-br from-indigo-700 to-indigo-900 text-white p-6 pt-12 pb-6 rounded-b-[40px] shadow-lg shrink-0 z-20">
+            <div class="flex justify-between items-center mb-5">
+                <div>
+                    <h1 class="text-2xl font-black tracking-tight uppercase">Service Finder</h1>
+                    <p id="city-name" class="text-[10px] font-bold text-indigo-200 uppercase flex items-center gap-1">
+                        <i data-lucide="navigation" class="w-3 h-3 animate-pulse"></i> Default Location (Mohali)
+                    </p>
+                </div>
+                <button onclick="fetchLocalServices()" class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="relative">
+                <input 
+                    type="text" 
+                    id="search-input"
+                    placeholder="Search for services..." 
+                    class="w-full py-3.5 px-12 rounded-2xl text-slate-800 text-sm focus:outline-none shadow-xl border-none"
+                    oninput="handleSearch(this.value)"
+                >
+                <i data-lucide="search" class="absolute left-4 top-4 text-slate-400 w-5 h-5"></i>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-50 relative pb-28">
+            <!-- Permission Error Message -->
+            <div id="error-box" class="hidden mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                <i data-lucide="info" class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"></i>
+                <p id="error-text" class="text-[10px] text-amber-700 font-medium flex-1"></p>
+                <button onclick="document.getElementById('error-box').classList.add('hidden')">
+                    <i data-lucide="x" class="w-3.5 h-3.5 text-amber-400"></i>
+                </button>
+            </div>
+
+            <!-- Radius Filter -->
+            <div class="px-6 py-5 bg-white mb-2 border-b border-slate-100">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="radius-label" class="text-[11px] font-black text-slate-400 uppercase">Search Radius: 10 KM</span>
+                    <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">OSM Data</span>
+                </div>
+                <input 
+                    type="range" min="1" max="30" step="1" value="10"
+                    id="radius-slider"
+                    class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    onchange="handleRadiusChange(this.value)"
+                >
+            </div>
+
+            <!-- Categories -->
+            <div id="categories-container" class="flex gap-4 px-6 py-4 overflow-x-auto no-scrollbar">
+                <!-- JS handles category rendering -->
+            </div>
+
+            <!-- Results List -->
+            <div class="px-6 mt-2 space-y-4">
+                <h2 id="results-count" class="text-xs font-black text-slate-400 uppercase tracking-widest">Nearby Results (0)</h2>
+                <div id="services-list" class="space-y-4">
+                    <!-- JS handles results rendering -->
+                </div>
+                <div id="loader" class="hidden flex flex-col items-center py-24 text-slate-300">
+                    <i data-lucide="loader-2" class="animate-spin mb-4 text-indigo-600 w-12 h-12"></i>
+                    <p class="text-xs font-black uppercase">Locating Professionals...</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="absolute bottom-6 left-6 right-6 bg-white/95 backdrop-blur-2xl h-20 rounded-[35px] shadow-2xl flex justify-around items-center px-4 z-30">
+            <button onclick="toggleView('list')" id="nav-list" class="flex flex-col items-center gap-1 text-indigo-600">
+                <i data-lucide="list" class="w-6 h-6"></i>
+                <span class="text-[9px] font-black uppercase">List</span>
+            </button>
+            
+            <div class="relative">
+                <a href="tel:911" class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white shadow-2xl -mt-12 border-[6px] border-white active:scale-90 transition-transform">
+                    <i data-lucide="phone" class="w-7 h-7"></i>
+                </a>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-black text-red-600 uppercase">Help</span>
+            </div>
+
+            <button onclick="toggleView('map')" id="nav-map" class="flex flex-col items-center gap-1 text-slate-300">
+                <i data-lucide="map" class="w-6 h-6"></i>
+                <span class="text-[9px] font-black uppercase">Map</span>
+            </button>
+        </nav>
+
+        <!-- Detail Bottom Sheet -->
+        <div id="bottom-sheet" class="hidden absolute inset-0 bg-black/60 z-[100] flex items-end">
+            <div class="w-full bg-white rounded-t-[50px] p-8 pb-14 transform transition-transform duration-300 translate-y-full" id="sheet-content">
+                <div class="w-16 h-1.5 bg-slate-100 rounded-full mx-auto mb-8"></div>
+                <h2 id="detail-name" class="text-2xl font-black text-slate-800"></h2>
+                <span id="detail-category" class="text-[10px] font-black text-indigo-600 uppercase tracking-widest"></span>
+                
+                <div class="grid grid-cols-1 gap-4 my-8">
+                    <div class="flex items-center gap-4 text-sm font-bold text-slate-700">
+                        <i data-lucide="map-pin" class="text-red-500 w-5 h-5"></i> <span id="detail-address"></span>
+                    </div>
+                    <div class="flex items-center gap-4 text-sm font-bold text-slate-700">
+                        <i data-lucide="phone" class="text-green-500 w-5 h-5"></i> <span id="detail-phone"></span>
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                    <a id="detail-call-btn" href="#" class="flex-1 bg-green-600 text-white font-black py-5 rounded-[25px] text-center shadow-xl flex items-center justify-center gap-2">
+                        <i data-lucide="phone" class="w-5 h-5"></i> Call Now
+                    </a>
+                    <a id="detail-direction-btn" target="_blank" href="#" class="flex-1 bg-indigo-600 text-white font-black py-5 rounded-[25px] text-center shadow-xl flex items-center justify-center gap-2">
+                        <i data-lucide="map" class="w-5 h-5"></i> Directions
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let state = {
+            view: 'list',
+            activeCategory: 'All',
+            services: [],
+            loading: false,
+            searchTerm: '',
+            radius: 10,
+            userLocation: { lat: 30.7046, lng: 76.7179, city: "Default (Mohali)" }
+        };
+
+        const categories = [
+            { name: 'All', icon: 'home' },
+            { name: 'Electrician', icon: 'wrench' },
+            { name: 'Plumber', icon: 'droplets' },
+            { name: 'Bike Repair', icon: 'bike' },
+            { name: 'Puncture', icon: 'activity' },
+            { name: 'Petrol Pump', icon: 'fuel' },
+            { name: 'AC Repair', icon: 'wind' },
+            { name: 'Cleaning', icon: 'sparkles' },
+            { name: 'Carpenter', icon: 'hammer' },
+            { name: 'Tiffin Service', icon: 'utensils' },
+        ];
+
+        // Initialization
+        window.onload = () => {
+            lucide.createIcons();
+            renderCategories();
+            initLocation();
+        };
+
+        function initLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        state.userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                            city: "Current Location"
+                        };
+                        document.getElementById('city-name').innerHTML = `<i data-lucide="navigation" class="w-3 h-3 animate-pulse"></i> ${state.userLocation.city}`;
+                        lucide.createIcons();
+                        fetchLocalServices();
+                    },
+                    (error) => {
+                        console.warn("Location denied", error);
+                        showError("Location access denied. Using Mohali coordinates.");
+                        fetchLocalServices();
+                    }
+                );
+            } else {
+                fetchLocalServices();
+            }
+        }
+
+        async function fetchLocalServices() {
+            setLoading(true);
+            const { lat, lng } = state.userLocation;
+            const radMeters = state.radius * 1000;
+
+            const query = `[out:json][timeout:25];(node["amenity"~"fuel|restaurant|plumber|electrician"](around:${radMeters},${lat},${lng});node["shop"~"bicycle|tyres|hvac|car_repair"](around:${radMeters},${lat},${lng});node["craft"~"carpenter"](around:${radMeters},${lat},${lng}););out body;`;
+
+            try {
+                const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+                const result = await response.json();
+                
+                state.services = result.elements.map((el, index) => {
+                    const dLat = (el.lat - lat) * 111;
+                    const dLng = (el.lon - lng) * 111;
+                    const dist = Math.sqrt(dLat * dLat + dLng * dLng).toFixed(1);
+
+                    return {
+                        id: el.id || index,
+                        name: el.tags.name || `${el.tags.amenity || el.tags.shop || 'Service'} Nearby`,
+                        category: el.tags.amenity || el.tags.shop || el.tags.craft || "Service",
+                        address: el.tags["addr:street"] || el.tags["addr:full"] || "Local Area",
+                        phone: el.tags.phone || el.tags["contact:phone"] || "N/A",
+                        rating: (4 + Math.random()).toFixed(1),
+                        distance: parseFloat(dist),
+                        lat: el.lat,
+                        lon: el.lon
+                    };
+                });
+            } catch (err) {
+                console.error(err);
+                state.services = [
+                    { id: 'f1', name: "Local Petrol Pump", category: "fuel", distance: 1.2, address: "Main Road", phone: "N/A", rating: "4.5", lat: lat + 0.005, lon: lng + 0.005 },
+                    { id: 'f2', name: "Quick Bike Service", category: "bicycle", distance: 2.5, address: "Local Market", phone: "N/A", rating: "4.8", lat: lat - 0.005, lon: lng + 0.01 }
+                ];
+            } finally {
+                setLoading(false);
+                renderServices();
+            }
+        }
+
+        // Render Functions
+        function renderCategories() {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = categories.map(cat => `
+                <button
+                    onclick="handleCategoryChange('${cat.name}')"
+                    id="cat-${cat.name}"
+                    class="flex flex-col items-center gap-2 min-w-[85px] p-4 rounded-[28px] transition-all border-2
+                        ${state.activeCategory === cat.name ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl' : 'bg-white text-slate-400 border-slate-50'}"
+                >
+                    <i data-lucide="${cat.icon}" class="w-5 h-5"></i>
+                    <span class="text-[9px] font-black uppercase whitespace-nowrap">${cat.name}</span>
+                </button>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function renderServices() {
+            const container = document.getElementById('services-list');
+            const filtered = state.services.filter(s => {
+                const matchCat = state.activeCategory === 'All' || s.category.toLowerCase().includes(state.activeCategory.toLowerCase());
+                const matchSearch = s.name.toLowerCase().includes(state.searchTerm.toLowerCase());
+                return matchCat && matchSearch;
+            });
+
+            document.getElementById('results-count').innerText = `Nearby Results (${filtered.length})`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-20 bg-white rounded-[30px] border border-dashed border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">No services found.</p>
+                </div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(s => `
+                <div onclick="showDetails(${JSON.stringify(s).replace(/"/g, '&quot;')})" 
+                     class="bg-white p-5 rounded-[30px] shadow-sm border border-slate-100 flex items-center gap-5 active:scale-95 transition-all cursor-pointer">
+                    <div class="w-16 h-16 bg-slate-50 rounded-[22px] flex items-center justify-center text-indigo-600 shrink-0">
+                        <i data-lucide="${getIconForCategory(s.category)}" class="w-7 h-7"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start mb-1">
+                            <h3 class="font-bold text-slate-800 truncate text-base">${s.name}</h3>
+                            <div class="flex items-center gap-1 text-yellow-500 text-[11px] font-black">
+                                <i data-lucide="star" class="w-2.5 h-2.5 fill-current"></i> ${s.rating}
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-slate-400 truncate mb-2">${s.address}</p>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1 text-indigo-600">
+                                <i data-lucide="map-pin" class="w-2.5 h-2.5"></i>
+                                <span class="text-[10px] font-black">${s.distance} KM AWAY</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // Event Handlers
+        function handleSearch(val) {
+            state.searchTerm = val;
+            renderServices();
+        }
+
+        function handleRadiusChange(val) {
+            state.radius = val;
+            document.getElementById('radius-label').innerText = `Search Radius: ${val} KM`;
+            fetchLocalServices();
+        }
+
+        function handleCategoryChange(cat) {
+            state.activeCategory = cat;
+            renderCategories();
+            renderServices();
+        }
+
+        function setLoading(isLoading) {
+            state.loading = isLoading;
+            document.getElementById('loader').classList.toggle('hidden', !isLoading);
+            document.getElementById('services-list').classList.toggle('hidden', isLoading);
+        }
+
+        function showError(msg) {
+            document.getElementById('error-box').classList.remove('hidden');
+            document.getElementById('error-text').innerText = msg;
+        }
+
+        function showDetails(service) {
+            document.getElementById('detail-name').innerText = service.name;
+            document.getElementById('detail-category').innerText = service.category;
+            document.getElementById('detail-address').innerText = service.address;
+            document.getElementById('detail-phone').innerText = service.phone || 'No contact info';
+            document.getElementById('detail-call-btn').href = `tel:${service.phone}`;
+            
+            // Generate Directions Link using Google Maps URL
+            const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${state.userLocation.lat},${state.userLocation.lng}&destination=${service.lat},${service.lon}&travelmode=driving`;
+            document.getElementById('detail-direction-btn').href = directionsUrl;
+            
+            const sheet = document.getElementById('bottom-sheet');
+            const content = document.getElementById('sheet-content');
+            sheet.classList.remove('hidden');
+            setTimeout(() => content.classList.remove('translate-y-full'), 10);
+            
+            sheet.onclick = () => {
+                content.classList.add('translate-y-full');
+                setTimeout(() => sheet.classList.add('hidden'), 300);
+            };
+        }
+
+        function getIconForCategory(cat) {
+            cat = cat.toLowerCase();
+            if (cat.includes('bike') || cat.includes('bicycle')) return 'bike';
+            if (cat.includes('fuel') || cat.includes('petrol')) return 'fuel';
+            if (cat.includes('punch') || cat.includes('tyre')) return 'activity';
+            if (cat.includes('electric')) return 'wrench';
+            if (cat.includes('plumb')) return 'droplets';
+            if (cat.includes('ac') || cat.includes('hvac')) return 'wind';
+            if (cat.includes('clean')) return 'sparkles';
+            if (cat.includes('carpenter')) return 'hammer';
+            if (cat.includes('restaur') || cat.includes('food')) return 'utensils';
+            return 'info';
+        }
+
+        function toggleView(v) {
+            state.view = v;
+            document.getElementById('nav-list').classList.toggle('text-indigo-600', v === 'list');
+            document.getElementById('nav-list').classList.toggle('text-slate-300', v !== 'list');
+            document.getElementById('nav-map').classList.toggle('text-indigo-600', v === 'map');
+            document.getElementById('nav-map').classList.toggle('text-slate-300', v !== 'map');
+            
+            if(v === 'map') {
+                document.getElementById('services-list').innerHTML = `
+                <div class="h-[450px] w-full bg-slate-100 rounded-[35px] relative overflow-hidden flex items-center justify-center">
+                    <div class="absolute inset-0 bg-slate-200 flex items-center justify-center text-slate-400 italic">Map View (Coming Soon)</div>
+                </div>`;
+            } else {
+                renderServices();
+            }
+        }
+    </script>
+</body>
+</html>
